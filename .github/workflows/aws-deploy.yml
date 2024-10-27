@@ -1,0 +1,56 @@
+name: Deploy to AWS
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy: [dev, uat, prod]'
+        type: string
+        default: uat
+        required: true
+      build-repository-type:
+        description: 'Environment to deploy: [releases, snapshots]'      
+        type: string
+        default: releases
+        required: true
+      build-version:
+        description: 'Build version to deploy. Example: python-app-1.0.1.zip'      
+        type: string
+        required: true        
+   
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1  
+
+      - name: Download build from build repository
+        run: |
+          echo "Downloading build from build repository..."
+          aws s3 cp s3://vw-demo-730335502100-build-repository/${{ github.event.inputs.build-repository-type }}/${{ github.event.inputs.build-version }} .
+
+      - name: Deploy build to AWS Lambda
+        run: |
+          echo "Deploying ${{ github.event.inputs.build-version }} to ${{ github.event.inputs.environment }} environment..."
+          echo ${{ github.event.inputs.environment }}
+          echo ${{ github.event.inputs.build-repository-type }}
+          echo ${{ github.event.inputs.build-version }}
+          aws lambda update-function-code \
+            --function-name lambda-s3-dynamodb-${{ github.event.inputs.environment }} \
+            --zip-file fileb://${{ github.event.inputs.build-version }} \
+            --region eu-west-1
+        
